@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Focus Tracker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --primary: #00f3ff;
+    --accent: #bc13fe;
+    --success: #00ff88;
+    --warning: #ffaa00;
+    --danger: #ff3366;
+    --bg: #05060f;
+    --card: #0d0f1e;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: #e8eaf6; font-family: 'Inter', sans-serif; margin: 0; overflow-x: hidden; }
+  .font-display { font-family: 'Orbitron', sans-serif; }
+  .glass { background: rgba(13,15,30,0.7); backdrop-filter: blur(20px); border: 1px solid var(--border); }
+  .glass-strong { background: rgba(13,15,30,0.9); backdrop-filter: blur(30px); border: 1px solid rgba(255,255,255,0.1); }
+  .neon-cyan { color: var(--primary); text-shadow: 0 0 10px rgba(0,243,255,0.5); }
+  .neon-purple { color: var(--accent); text-shadow: 0 0 10px rgba(188,19,254,0.5); }
+  .neon-green { color: var(--success); text-shadow: 0 0 10px rgba(0,255,136,0.5); }
+  .neon-red { color: var(--danger); text-shadow: 0 0 10px rgba(255,51,102,0.5); }
+  .glow-cyan { box-shadow: 0 0 20px rgba(0,243,255,0.3); }
+  .glow-purple { box-shadow: 0 0 20px rgba(188,19,254,0.3); }
+  .glow-red { box-shadow: 0 0 20px rgba(255,51,102,0.4); }
+  .border-cyan { border-color: rgba(0,243,255,0.3) !important; }
+  .border-purple { border-color: rgba(188,19,254,0.3) !important; }
+
+  /* Page transitions */
+  .page { display: none; animation: fadeIn 0.3s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+  /* Sidebar */
+  .nav-item { transition: all 0.2s; }
+  .nav-item:hover { background: rgba(255,255,255,0.05); }
+  .nav-item.active { background: rgba(0,243,255,0.1); border-left: 3px solid var(--primary); color: var(--primary); }
+  .nav-item.active svg { filter: drop-shadow(0 0 4px rgba(0,243,255,0.8)); }
+
+  /* Focus Score Ring */
+  .score-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+  .score-ring canvas { transform: rotate(-90deg); }
+  .score-value { position: absolute; text-align: center; }
+
+  /* Webcam */
+  #webcam-feed { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .webcam-overlay { position: absolute; inset: 0; pointer-events: none; }
+
+  /* Animations */
+  @keyframes pulse-ring { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.05); } }
+  @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
+  @keyframes blink-alert { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+  .pulse-ring { animation: pulse-ring 2s ease-in-out infinite; }
+  .float-anim { animation: float 5s ease-in-out infinite; }
+  .blink-alert { animation: blink-alert 0.8s ease-in-out infinite; }
+
+  /* Progress bar */
+  .progress-bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; transition: width 0.5s ease; }
+
+  /* Metric card */
+  .metric-val { font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; }
+
+  /* Table */
+  table { border-collapse: collapse; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+  td, th { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,243,255,0.3); border-radius: 4px; }
+
+  /* Tooltip */
+  .tooltip { position: relative; }
+  .tooltip:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #1a1d2e; border: 1px solid var(--border); padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; white-space: nowrap; z-index: 100; }
+
+  /* Distraction alert */
+  #distraction-alert { transition: all 0.3s; }
+
+  /* Settings toggle */
+  .toggle-input { display: none; }
+  .toggle-label { display: inline-block; width: 44px; height: 24px; background: rgba(255,255,255,0.1); border-radius: 12px; position: relative; cursor: pointer; transition: background 0.3s; }
+  .toggle-label::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: white; top: 3px; left: 3px; transition: left 0.3s; }
+  .toggle-input:checked + .toggle-label { background: var(--primary); }
+  .toggle-input:checked + .toggle-label::after { left: 23px; }
+
+  /* Score colors */
+  .cat-high { color: var(--success); }
+  .cat-medium { color: var(--primary); }
+  .cat-low { color: var(--warning); }
+  .cat-distracted { color: var(--danger); }
+
+  /* Ambient bg */
+  .ambient-1 { position: fixed; top: -200px; right: -200px; width: 600px; height: 600px; background: radial-gradient(circle, rgba(0,243,255,0.04) 0%, transparent 70%); pointer-events: none; z-index: 0; }
+  .ambient-2 { position: fixed; bottom: -200px; left: 10%; width: 700px; height: 700px; background: radial-gradient(circle, rgba(188,19,254,0.04) 0%, transparent 70%); pointer-events: none; z-index: 0; }
+
+  /* Responsive sidebar */
+  @media (max-width: 768px) {
+    #sidebar { width: 60px; }
+    #sidebar .nav-label, #sidebar .logo-text, #sidebar .status-text { display: none; }
+    #sidebar .logo { justify-content: center; }
+    #sidebar .nav-item { justify-content: center; padding: 12px; }
+    #main-content { margin-left: 60px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="ambient-1"></div>
+<div class="ambient-2"></div>
+
+<!-- Distraction Alert Banner -->
+<div id="distraction-alert" class="hidden fixed top-0 left-0 right-0 z-50 py-3 px-6 text-center font-bold text-sm tracking-widest" style="background: rgba(255,51,102,0.9); backdrop-filter:blur(10px);">
+  ⚠️ DISTRACTION DETECTED — REFOCUS NOW ⚠️
+</div>
+
+<div class="flex min-h-screen relative z-10">
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="glass fixed left-0 top-0 h-full z-40 flex flex-col" style="width:240px; transition: width 0.3s;">
+    <div class="logo p-5 flex items-center gap-3 border-b" style="border-color: var(--border)">
+      <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 glow-cyan" style="background: rgba(0,243,255,0.15); border: 1px solid rgba(0,243,255,0.4);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00f3ff" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      </div>
+      <div class="logo-text">
+        <div class="font-display text-sm font-bold tracking-wider text-white">FOCUS</div>
+        <div class="text-xs neon-cyan tracking-widest" style="font-family:monospace">AI TRACKER</div>
+      </div>
+    </div>
+
+    <nav class="flex-1 py-4 px-3 space-y-1">
+      <div class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer" onclick="showPage('home')" data-page="home">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+        <span class="nav-label text-sm font-medium">Home</span>
+      </div>
+      <div class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer" onclick="showPage('tracker')" data-page="tracker">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span class="nav-label text-sm font-medium">Live Tracker</span>
+      </div>
+      <div class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer" onclick="showPage('dashboard')" data-page="dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span class="nav-label text-sm font-medium">Dashboard</span>
+      </div>
+      <div class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer" onclick="showPage('history')" data-page="history">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="nav-label text-sm font-medium">History</span>
+      </div>
+      <div class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer" onclick="showPage('settings')" data-page="settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label text-sm font-medium">Settings</span>
+      </div>
+    </nav>
+
+    <div class="p-3 border-t" style="border-color: var(--border)">
+      <div class="glass rounded-xl p-3 border-cyan">
+        <p class="text-xs tracking-widest mb-1.5" style="color:#4b5563; font-family:monospace">SYSTEM STATUS</p>
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-2 rounded-full" style="background:var(--success); box-shadow: 0 0 6px var(--success)"></div>
+          <span class="status-text text-xs font-medium">Online & Ready</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main id="main-content" style="margin-left:240px; padding: 32px; min-height:100vh; max-width: calc(100vw - 240px);">
+
+    <!-- ═══════════════════════ HOME PAGE ═══════════════════════ -->
+    <div id="page-home" class="page active">
+      <!-- Hero -->
+      <div class="glass rounded-3xl overflow-hidden mb-8 relative" style="min-height:320px; border: 1px solid rgba(0,243,255,0.15);">
+        <div class="absolute inset-0" style="background: linear-gradient(135deg, rgba(0,243,255,0.05) 0%, transparent 50%, rgba(188,19,254,0.05) 100%)"></div>
+        <div class="relative z-10 p-10 flex items-center justify-between h-full">
+          <div class="max-w-xl">
+            <div class="text-xs tracking-widest mb-3 neon-cyan font-mono">▶ AI-POWERED FOCUS ANALYSIS</div>
+            <h1 class="font-display text-4xl font-black text-white mb-4 leading-tight">MASTER YOUR<br><span class="neon-cyan">DEEP WORK</span></h1>
+            <p class="text-gray-400 mb-8 leading-relaxed">Real-time webcam analysis tracks eye movement, blink rate, and head pose to calculate your focus score and keep you in the zone.</p>
+            <button onclick="showPage('tracker')" class="flex items-center gap-3 px-8 py-4 rounded-xl font-bold text-sm tracking-widest uppercase text-black transition-all hover:scale-105" style="background: var(--primary); box-shadow: 0 0 30px rgba(0,243,255,0.4)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Start Tracking
+            </button>
+          </div>
+          <div class="hidden lg:flex items-center justify-center w-64 h-64 float-anim">
+            <div class="relative">
+              <div class="w-48 h-48 rounded-full flex items-center justify-center" style="background: radial-gradient(circle, rgba(0,243,255,0.1) 0%, transparent 70%); border: 2px solid rgba(0,243,255,0.3);">
+                <div class="w-32 h-32 rounded-full flex items-center justify-center pulse-ring" style="background: radial-gradient(circle, rgba(188,19,254,0.15) 0%, transparent 70%); border: 2px solid rgba(188,19,254,0.4);">
+                  <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="url(#grad1)" stroke-width="1.5">
+                    <defs><linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#00f3ff"/><stop offset="100%" style="stop-color:#bc13fe"/></linearGradient></defs>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today's Stats -->
+      <h2 class="font-display text-sm tracking-widest mb-4 text-gray-400">TODAY'S PERFORMANCE</h2>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="glass rounded-2xl p-5 border-cyan">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style="background: rgba(0,243,255,0.1)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00f3ff" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
+          <p class="text-xs text-gray-500 mb-1">Avg Focus Score</p>
+          <div class="metric-val neon-cyan" id="home-avg-score">0</div>
+          <p class="text-xs text-gray-500">out of 100</p>
+        </div>
+        <div class="glass rounded-2xl p-5 border-purple">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style="background: rgba(188,19,254,0.1)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bc13fe" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <p class="text-xs text-gray-500 mb-1">Study Time</p>
+          <div class="metric-val neon-purple" id="home-study-time">0m</div>
+          <p class="text-xs text-gray-500">total today</p>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style="background: rgba(0,255,136,0.1)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <p class="text-xs text-gray-500 mb-1">Sessions Done</p>
+          <div class="metric-val neon-green" id="home-sessions">0</div>
+          <p class="text-xs text-gray-500">completed</p>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style="background: rgba(255,170,0,0.1)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffaa00" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <p class="text-xs text-gray-500 mb-1">Focus %</p>
+          <div class="metric-val" style="color:#ffaa00" id="home-focus-pct">0%</div>
+          <p class="text-xs text-gray-500">focused time</p>
+        </div>
+      </div>
+
+      <!-- Features -->
+      <h2 class="font-display text-sm tracking-widest mb-4 text-gray-400">FEATURES</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass rounded-2xl p-5">
+          <div class="neon-cyan text-2xl mb-2">👁️</div>
+          <h3 class="font-bold mb-1">Eye Tracking</h3>
+          <p class="text-sm text-gray-400">Monitors eye openness, blink rate, and gaze direction in real-time</p>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <div class="neon-purple text-2xl mb-2">🧠</div>
+          <h3 class="font-bold mb-1">ML Focus Score</h3>
+          <p class="text-sm text-gray-400">Sliding window algorithm smooths 30 frames for accurate scoring</p>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <div class="neon-green text-2xl mb-2">📡</div>
+          <h3 class="font-bold mb-1">IoT Alerts</h3>
+          <p class="text-sm text-gray-400">Send distraction alerts to ESP32 / Raspberry Pi via HTTP</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════ LIVE TRACKER PAGE ═══════════════════════ -->
+    <div id="page-tracker" class="page">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="font-display text-2xl font-bold text-white tracking-wider">LIVE TRACKER</h1>
+          <p class="text-xs text-gray-500 tracking-widest mt-1" id="tracker-status-text">SYSTEM STANDBY</p>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="font-display text-xl neon-cyan" id="session-timer">0s</div>
+          <button id="start-btn" onclick="toggleSession()" class="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm tracking-widest uppercase text-black transition-all hover:scale-105" style="background: var(--primary); box-shadow: 0 0 20px rgba(0,243,255,0.3)">
+            <svg id="start-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="start-label">Initialize</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Webcam Feed -->
+        <div class="lg:col-span-2">
+          <div class="glass rounded-2xl overflow-hidden relative" style="height: 420px;">
+            <video id="webcam-feed" class="w-full h-full object-cover" style="transform:scaleX(-1); display:block;" autoplay muted playsinline></video>
+            <div id="cam-placeholder" class="absolute inset-0 flex flex-col items-center justify-center gap-3" style="background: rgba(5,6,15,0.9);">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <p class="text-gray-500 tracking-widest text-sm font-mono">CAMERA OFFLINE</p>
+            </div>
+            <!-- Scanning overlay when active -->
+            <div id="scan-overlay" class="hidden webcam-overlay">
+              <div class="absolute inset-0" style="background: linear-gradient(to bottom, transparent 40%, rgba(0,243,255,0.03) 50%, transparent 60%); animation: scanline 3s linear infinite;"></div>
+              <style>@keyframes scanline { 0%{background-position:0 -100%} 100%{background-position:0 200%} }</style>
+              <!-- Corner brackets -->
+              <div class="absolute top-4 left-4 w-12 h-12" style="border-top: 2px solid var(--primary); border-left: 2px solid var(--primary); opacity:0.7"></div>
+              <div class="absolute top-4 right-4 w-12 h-12" style="border-top: 2px solid var(--primary); border-right: 2px solid var(--primary); opacity:0.7"></div>
+              <div class="absolute bottom-4 left-4 w-12 h-12" style="border-bottom: 2px solid var(--primary); border-left: 2px solid var(--primary); opacity:0.7"></div>
+              <div class="absolute bottom-4 right-4 w-12 h-12" style="border-bottom: 2px solid var(--primary); border-right: 2px solid var(--primary); opacity:0.7"></div>
+              <!-- Status label -->
+              <div class="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-mono tracking-wider" style="background: rgba(0,243,255,0.15); border: 1px solid rgba(0,243,255,0.4); color: var(--primary)">● ANALYZING</div>
+            </div>
+            <!-- Face detection box -->
+            <div id="face-box" class="hidden absolute" style="border: 2px solid var(--primary); box-shadow: 0 0 10px rgba(0,243,255,0.5); transition: all 0.3s; width:120px; height:140px; left:50%; top:50%; transform: translate(-50%,-50%); border-radius:4px;"></div>
+          </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="space-y-4">
+          <!-- Focus Score Ring -->
+          <div class="glass rounded-2xl p-5 text-center">
+            <p class="text-xs text-gray-500 tracking-widest mb-3 font-mono">FOCUS INDEX</p>
+            <div class="score-ring mx-auto mb-3" style="width:140px; height:140px;">
+              <canvas id="score-ring-canvas" width="140" height="140"></canvas>
+              <div class="score-value">
+                <div class="font-display text-3xl font-black" id="score-display" style="color: var(--primary)">--</div>
+                <div class="text-xs text-gray-500 tracking-wider">SCORE</div>
+              </div>
+            </div>
+            <!-- Category badge -->
+            <div id="category-badge" class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold tracking-widest" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border)">
+              <div class="w-2 h-2 rounded-full bg-gray-500"></div>
+              <span>STANDBY</span>
+            </div>
+          </div>
+
+          <!-- Telemetry -->
+          <div class="glass rounded-2xl p-5">
+            <p class="text-xs text-gray-500 tracking-widest mb-4 font-mono">TELEMETRY</p>
+            <div class="space-y-3">
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-gray-400">EYE OPENNESS</span>
+                  <span class="neon-cyan font-mono" id="eye-val">--</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="eye-bar" style="width:0%; background: linear-gradient(to right, #00f3ff, #bc13fe)"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-gray-400">GAZE VECTOR</span>
+                  <span class="neon-purple font-mono" id="gaze-val">--</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="gaze-bar" style="width:0%; background: linear-gradient(to right, #bc13fe, #00f3ff)"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-gray-400">HEAD POSE</span>
+                  <span class="font-mono" style="color:#ffaa00" id="head-val">--</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="head-bar" style="width:0%; background: linear-gradient(to right, #ffaa00, #00ff88)"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-gray-400">BLINK RATE</span>
+                  <span class="neon-green font-mono" id="blink-val">--</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="blink-bar" style="width:0%; background: linear-gradient(to right, #00ff88, #00f3ff)"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Score Chart -->
+          <div class="glass rounded-2xl p-5">
+            <p class="text-xs text-gray-500 tracking-widest mb-3 font-mono">LIVE FOCUS TREND</p>
+            <canvas id="live-chart" height="80"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session Stats -->
+      <div id="session-stats" class="hidden mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="glass rounded-2xl p-4 text-center">
+          <p class="text-xs text-gray-500 mb-1">Avg Score</p>
+          <div class="font-display text-xl neon-cyan" id="sess-avg">0</div>
+        </div>
+        <div class="glass rounded-2xl p-4 text-center">
+          <p class="text-xs text-gray-500 mb-1">Focus %</p>
+          <div class="font-display text-xl neon-green" id="sess-pct">0%</div>
+        </div>
+        <div class="glass rounded-2xl p-4 text-center">
+          <p class="text-xs text-gray-500 mb-1">Distractions</p>
+          <div class="font-display text-xl neon-red" id="sess-dist">0</div>
+        </div>
+        <div class="glass rounded-2xl p-4 text-center">
+          <p class="text-xs text-gray-500 mb-1">Category</p>
+          <div class="font-display text-sm" id="sess-cat" style="color:var(--primary)">--</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════ DASHBOARD PAGE ═══════════════════════ -->
+    <div id="page-dashboard" class="page">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="font-display text-2xl font-bold text-white tracking-wider">DASHBOARD</h1>
+          <p class="text-xs text-gray-500 tracking-widest mt-1">ANALYTICS OVERVIEW</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="loadDashboard('today')" class="dash-period-btn px-4 py-2 rounded-lg text-xs font-bold tracking-wider uppercase transition-all active-period" data-period="today">Today</button>
+          <button onclick="loadDashboard('week')" class="dash-period-btn px-4 py-2 rounded-lg text-xs font-bold tracking-wider uppercase transition-all" data-period="week">7 Days</button>
+        </div>
+      </div>
+
+      <style>
+        .dash-period-btn { background: rgba(255,255,255,0.05); color: #9ca3af; border: 1px solid var(--border); }
+        .dash-period-btn.active-period { background: rgba(0,243,255,0.1); color: var(--primary); border-color: rgba(0,243,255,0.4); }
+      </style>
+
+      <!-- KPI Row -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="glass rounded-2xl p-5 border-cyan">
+          <p class="text-xs text-gray-500 mb-2">Avg Focus Score</p>
+          <div class="font-display text-3xl neon-cyan" id="d-avg-score">0</div>
+          <div class="progress-bar mt-3"><div class="progress-fill" id="d-avg-bar" style="width:0%; background:var(--primary)"></div></div>
+        </div>
+        <div class="glass rounded-2xl p-5 border-purple">
+          <p class="text-xs text-gray-500 mb-2">Focus Percentage</p>
+          <div class="font-display text-3xl neon-purple" id="d-focus-pct">0%</div>
+          <div class="progress-bar mt-3"><div class="progress-fill" id="d-pct-bar" style="width:0%; background:var(--accent)"></div></div>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <p class="text-xs text-gray-500 mb-2">Most Focused Hour</p>
+          <div class="font-display text-3xl neon-green" id="d-best-hour">--</div>
+          <p class="text-xs text-gray-500 mt-2">peak performance</p>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <p class="text-xs text-gray-500 mb-2">Total Study Time</p>
+          <div class="font-display text-2xl" style="color:#ffaa00" id="d-study-time">0m</div>
+          <p class="text-xs text-gray-500 mt-2">sessions completed</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <!-- Hourly Focus Chart -->
+        <div class="glass rounded-2xl p-5 lg:col-span-2">
+          <p class="text-xs text-gray-500 tracking-widest mb-4 font-mono">HOURLY FOCUS SCORE</p>
+          <canvas id="hourly-chart" height="200"></canvas>
+        </div>
+        <!-- Donut Chart -->
+        <div class="glass rounded-2xl p-5">
+          <p class="text-xs text-gray-500 tracking-widest mb-4 font-mono">FOCUS BREAKDOWN</p>
+          <canvas id="donut-chart" height="200"></canvas>
+          <div class="mt-4 space-y-2" id="donut-legend"></div>
+        </div>
+      </div>
+
+      <!-- Trend Chart -->
+      <div class="glass rounded-2xl p-5">
+        <p class="text-xs text-gray-500 tracking-widest mb-4 font-mono">7-DAY FOCUS TREND</p>
+        <canvas id="trend-chart" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════ HISTORY PAGE ═══════════════════════ -->
+    <div id="page-history" class="page">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="font-display text-2xl font-bold text-white tracking-wider">SESSION HISTORY</h1>
+          <p class="text-xs text-gray-500 tracking-widest mt-1">ALL COMPLETED SESSIONS</p>
+        </div>
+        <button onclick="clearHistory()" class="px-4 py-2 rounded-lg text-xs font-bold tracking-wider uppercase text-red-400 transition-all hover:bg-red-400/10" style="border: 1px solid rgba(255,51,102,0.3)">Clear All</button>
+      </div>
+
+      <div class="glass rounded-2xl overflow-hidden">
+        <div id="history-table-wrap">
+          <div id="no-history" class="text-center py-20 text-gray-500">
+            <div class="text-4xl mb-3">📋</div>
+            <p class="text-sm tracking-wider">No sessions yet. Start tracking!</p>
+          </div>
+          <table id="history-table" class="w-full hidden">
+            <thead>
+              <tr>
+                <th>Date & Time</th>
+                <th>Duration</th>
+                <th>Avg Score</th>
+                <th>Focus %</th>
+                <th>Distractions</th>
+                <th>Category</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Session Detail Modal -->
+      <div id="session-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.8); backdrop-filter:blur(10px)">
+        <div class="glass-strong rounded-3xl p-6 max-w-2xl w-full mx-4" style="max-height:80vh; overflow-y:auto">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-display text-lg font-bold neon-cyan">SESSION DETAIL</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-white">✕</button>
+          </div>
+          <div id="modal-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════ SETTINGS PAGE ═══════════════════════ -->
+    <div id="page-settings" class="page">
+      <div class="mb-6">
+        <h1 class="font-display text-2xl font-bold text-white tracking-wider">SETTINGS</h1>
+        <p class="text-xs text-gray-500 tracking-widest mt-1">CONFIGURE YOUR TRACKER</p>
+      </div>
+
+      <div class="max-w-2xl space-y-4">
+        <!-- Alerts -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold mb-4 text-sm tracking-wider uppercase">Alert Settings</h3>
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="font-medium text-sm">Sound Alerts</p>
+                <p class="text-xs text-gray-400 mt-0.5">Beep when distracted</p>
+              </div>
+              <input type="checkbox" id="set-sound" class="toggle-input" onchange="saveSettings()">
+              <label for="set-sound" class="toggle-label"></label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="font-medium text-sm">Screen Alerts</p>
+                <p class="text-xs text-gray-400 mt-0.5">Banner when distracted</p>
+              </div>
+              <input type="checkbox" id="set-screen" class="toggle-input" checked onchange="saveSettings()">
+              <label for="set-screen" class="toggle-label"></label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="font-medium text-sm">IoT Alerts</p>
+                <p class="text-xs text-gray-400 mt-0.5">Send alerts to your device</p>
+              </div>
+              <input type="checkbox" id="set-iot" class="toggle-input" onchange="saveSettings()">
+              <label for="set-iot" class="toggle-label"></label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thresholds -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold mb-4 text-sm tracking-wider uppercase">Detection Thresholds</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-gray-300 block mb-2">Distraction Timeout: <span id="dist-timeout-val" class="neon-cyan font-mono">5s</span></label>
+              <input type="range" id="set-timeout" min="3" max="15" value="5" class="w-full" oninput="document.getElementById('dist-timeout-val').textContent=this.value+'s'" onchange="saveSettings()" style="accent-color: var(--primary)">
+            </div>
+          </div>
+        </div>
+
+        <!-- IoT Device -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold mb-4 text-sm tracking-wider uppercase">IoT Integration</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs text-gray-400 block mb-2">Device Endpoint URL</label>
+              <input type="url" id="set-iot-url" placeholder="http://192.168.1.100/alert" onchange="saveSettings()" class="w-full px-4 py-3 rounded-xl text-sm" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: white; outline: none;">
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-2">Device ID</label>
+              <input type="text" id="set-iot-id" placeholder="esp32-001" onchange="saveSettings()" class="w-full px-4 py-3 rounded-xl text-sm" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: white; outline: none;">
+            </div>
+            <div class="glass rounded-xl p-4" style="background: rgba(0,243,255,0.03); border: 1px solid rgba(0,243,255,0.15)">
+              <p class="text-xs text-gray-400 mb-2">IoT Payload Example (ESP32/RPi):</p>
+              <pre class="text-xs neon-cyan font-mono">POST http://&lt;your-device&gt;/alert
+{
+  "type": "DISTRACTION",
+  "score": 25,
+  "message": "User distracted"
+}</pre>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="saveSettings(); showToast('Settings saved!')" class="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase text-black" style="background: var(--primary)">Save Settings</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-6 right-6 z-50 hidden px-6 py-3 rounded-xl text-sm font-bold" style="background: rgba(0,243,255,0.9); color: #000; backdrop-filter:blur(10px);"></div>
+
+<script>
+// ═══════════════════════════════════════════
+// DATA STORE (localStorage)
+// ═══════════════════════════════════════════
+const DB = {
+  getSessions: () => JSON.parse(localStorage.getItem('ft_sessions') || '[]'),
+  saveSessions: (s) => localStorage.setItem('ft_sessions', JSON.stringify(s)),
+  getSettings: () => JSON.parse(localStorage.getItem('ft_settings') || JSON.stringify({
+    sound: false, screen: true, iot: false,
+    timeout: 5, iotUrl: '', iotId: ''
+  })),
+  saveSettings: (s) => localStorage.setItem('ft_settings', JSON.stringify(s)),
+};
+
+// ═══════════════════════════════════════════
+// PAGE NAVIGATION
+// ═══════════════════════════════════════════
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  const navEl = document.querySelector(`[data-page="${page}"]`);
+  if (navEl) navEl.classList.add('active');
+  if (page === 'home') updateHomeStats();
+  if (page === 'dashboard') loadDashboard('today');
+  if (page === 'history') renderHistory();
+  if (page === 'settings') loadSettings();
+}
+
+// ═══════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════
+function loadSettings() {
+  const s = DB.getSettings();
+  document.getElementById('set-sound').checked = s.sound;
+  document.getElementById('set-screen').checked = s.screen;
+  document.getElementById('set-iot').checked = s.iot;
+  document.getElementById('set-timeout').value = s.timeout;
+  document.getElementById('dist-timeout-val').textContent = s.timeout + 's';
+  document.getElementById('set-iot-url').value = s.iotUrl || '';
+  document.getElementById('set-iot-id').value = s.iotId || '';
+}
+function saveSettings() {
+  DB.saveSettings({
+    sound: document.getElementById('set-sound').checked,
+    screen: document.getElementById('set-screen').checked,
+    iot: document.getElementById('set-iot').checked,
+    timeout: parseInt(document.getElementById('set-timeout').value),
+    iotUrl: document.getElementById('set-iot-url').value,
+    iotId: document.getElementById('set-iot-id').value,
+  });
+}
+
+// ═══════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), 2500);
+}
+
+// ═══════════════════════════════════════════
+// HOME STATS
+// ═══════════════════════════════════════════
+function updateHomeStats() {
+  const sessions = DB.getSessions();
+  const today = new Date().toDateString();
+  const todaySess = sessions.filter(s => new Date(s.startTime).toDateString() === today && s.status === 'completed');
+  const scores = todaySess.map(s => s.avgFocusScore).filter(Boolean);
+  const avgScore = scores.length ? Math.round(scores.reduce((a,b) => a+b,0)/scores.length) : 0;
+  const totalTime = todaySess.reduce((a,s) => a + (s.duration||0), 0);
+  const avgPct = todaySess.length ? Math.round(todaySess.reduce((a,s) => a+(s.focusPercentage||0),0)/todaySess.length) : 0;
+  document.getElementById('home-avg-score').textContent = avgScore;
+  document.getElementById('home-study-time').textContent = fmtTime(totalTime);
+  document.getElementById('home-sessions').textContent = todaySess.length;
+  document.getElementById('home-focus-pct').textContent = avgPct + '%';
+}
+
+function fmtTime(secs) {
+  if (secs < 60) return secs + 's';
+  const m = Math.floor(secs/60), s2 = secs%60;
+  if (m < 60) return m + 'm ' + s2 + 's';
+  return Math.floor(m/60) + 'h ' + (m%60) + 'm';
+}
+
+// ═══════════════════════════════════════════
+// DSA: SLIDING WINDOW + QUEUE
+// ═══════════════════════════════════════════
+const WINDOW_SIZE = 30;
+let scoreWindow = [];      // Sliding window
+let frameQueue = [];       // Queue for frame data
+let distractionTicks = 0;
+
+function processFrame(rawEye, rawGaze, rawHead, rawBlink) {
+  // DSA Queue: enqueue raw frame
+  frameQueue.push({ rawEye, rawGaze, rawHead, rawBlink, ts: Date.now() });
+  if (frameQueue.length > 10) frameQueue.shift(); // dequeue
+
+  // Raw score formula: 0.4*eye + 0.3*gaze + 0.2*head + 0.1*blink
+  const rawScore = (rawEye*0.4 + rawGaze*0.3 + rawHead*0.2 + rawBlink*0.1) * 100;
+
+  // DSA Sliding Window: push and trim
+  scoreWindow.push(rawScore);
+  if (scoreWindow.length > WINDOW_SIZE) scoreWindow.shift();
+
+  // Smooth score
+  const smoothScore = Math.round(scoreWindow.reduce((a,b)=>a+b,0) / scoreWindow.length);
+
+  // Distraction tracking
+  const settings = DB.getSettings();
+  const timeoutTicks = (settings.timeout || 5) * 10; // 10 ticks/s
+  if (rawGaze < 0.5 || rawEye < 0.3) {
+    distractionTicks++;
+  } else {
+    distractionTicks = Math.max(0, distractionTicks - 1);
+  }
+  const isDistracted = distractionTicks >= timeoutTicks;
+
+  // Category (HashMap)
+  const categoryMap = {
+    high: { label: 'HIGH FOCUS', color: '#00ff88', threshold: 75 },
+    medium: { label: 'MEDIUM FOCUS', color: '#00f3ff', threshold: 50 },
+    low: { label: 'LOW FOCUS', color: '#ffaa00', threshold: 25 },
+    distracted: { label: 'DISTRACTED', color: '#ff3366', threshold: 0 },
+  };
+  let cat = isDistracted ? 'distracted' : smoothScore >= 75 ? 'high' : smoothScore >= 50 ? 'medium' : smoothScore >= 25 ? 'low' : 'distracted';
+
+  return { score: smoothScore, category: cat, catInfo: categoryMap[cat], isDistracted };
+}
+
+// ═══════════════════════════════════════════
+// LIVE TRACKER
+// ═══════════════════════════════════════════
+let isSessionActive = false;
+let sessionStartTime = null;
+let sessionId = null;
+let sessionTimer = null;
+let mlInterval = null;
+let dataPoints = [];
+let distractionCount = 0;
+let liveChart = null;
+let liveScores = [];
+
+function toggleSession() {
+  if (!isSessionActive) startSession();
+  else endSession();
+}
+
+async function startSession() {
+  // Request camera
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    document.getElementById('webcam-feed').srcObject = stream;
+    document.getElementById('cam-placeholder').style.display = 'none';
+    document.getElementById('scan-overlay').classList.remove('hidden');
+    document.getElementById('face-box').classList.remove('hidden');
+  } catch(e) {
+    showToast('Camera access denied. Using simulation mode.');
+  }
+
+  isSessionActive = true;
+  sessionStartTime = Date.now();
+  sessionId = Date.now();
+  dataPoints = [];
+  distractionCount = 0;
+  scoreWindow = [];
+  frameQueue = [];
+  distractionTicks = 0;
+  liveScores = [];
+
+  document.getElementById('start-label').textContent = 'Stop';
+  document.getElementById('start-icon').innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+  document.getElementById('start-btn').style.background = '#ff3366';
+  document.getElementById('start-btn').style.boxShadow = '0 0 20px rgba(255,51,102,0.4)';
+  document.getElementById('tracker-status-text').textContent = 'SESSION ACTIVE';
+  document.getElementById('session-stats').classList.remove('hidden');
+
+  // Session timer
+  sessionTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+    document.getElementById('session-timer').textContent = fmtTime(elapsed);
+  }, 1000);
+
+  // Init live chart
+  const ctx = document.getElementById('live-chart').getContext('2d');
+  if (liveChart) liveChart.destroy();
+  liveChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        borderColor: '#00f3ff',
+        backgroundColor: 'rgba(0,243,255,0.05)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280', font: { size: 10 } } }
+      },
+      animation: { duration: 100 }
+    }
+  });
+
+  // ML simulation loop (10 fps)
+  mlInterval = setInterval(runMLFrame, 100);
+
+  // Notify IoT - session started
+  sendIotAlert('SESSION_START', 100);
+}
+
+function endSession() {
+  isSessionActive = false;
+  clearInterval(sessionTimer);
+  clearInterval(mlInterval);
+
+  // Stop camera
+  const video = document.getElementById('webcam-feed');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  document.getElementById('cam-placeholder').style.display = '';
+  document.getElementById('scan-overlay').classList.add('hidden');
+  document.getElementById('face-box').classList.add('hidden');
+
+  document.getElementById('start-label').textContent = 'Initialize';
+  document.getElementById('start-icon').innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+  document.getElementById('start-btn').style.background = 'var(--primary)';
+  document.getElementById('start-btn').style.boxShadow = '0 0 20px rgba(0,243,255,0.3)';
+  document.getElementById('tracker-status-text').textContent = 'SESSION COMPLETE';
+
+  // Hide distraction alert
+  document.getElementById('distraction-alert').classList.add('hidden');
+
+  // Save session
+  const duration = Math.floor((Date.now() - sessionStartTime) / 1000);
+  const scores = dataPoints.map(d => d.score);
+  const avgScore = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+  const focusedPoints = dataPoints.filter(d => d.category === 'high' || d.category === 'medium').length;
+  const focusPercent = dataPoints.length ? Math.round((focusedPoints/dataPoints.length)*100) : 0;
+
+  // DSA Sort: hourly breakdown
+  const hourMap = {};
+  for (const dp of dataPoints) {
+    const h = new Date(dp.ts).getHours();
+    if (!hourMap[h]) hourMap[h] = [];
+    hourMap[h].push(dp.score);
+  }
+  const hourlyBreakdown = Object.entries(hourMap)
+    .map(([h, scores]) => ({ hour: parseInt(h), avg: Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) }))
+    .sort((a,b) => b.avg - a.avg); // Sort descending by score
+
+  const session = {
+    id: sessionId,
+    startTime: new Date(sessionStartTime).toISOString(),
+    duration,
+    avgFocusScore: avgScore,
+    focusPercentage: focusPercent,
+    distractionCount,
+    dataPoints,
+    hourlyBreakdown,
+    status: 'completed',
+  };
+
+  const sessions = DB.getSessions();
+  sessions.unshift(session);
+  DB.saveSessions(sessions);
+
+  showToast(`Session saved! Avg Score: ${avgScore}`);
+  sendIotAlert('SESSION_END', avgScore);
+}
+
+// Simulated ML frame with realistic behavior
+let mlPhase = 0;
+let mlNoise = 0;
+function runMLFrame() {
+  mlPhase += 0.05;
+  mlNoise = (Math.random() - 0.5) * 0.1;
+
+  // Simulate natural focus fluctuations
+  const baseEye = 0.7 + Math.sin(mlPhase * 0.3) * 0.2 + mlNoise;
+  const baseGaze = 0.8 + Math.sin(mlPhase * 0.7) * 0.15 + (Math.random()-0.5)*0.05;
+  const baseHead = 0.85 + Math.sin(mlPhase * 0.4) * 0.1 + mlNoise;
+  const baseBlink = Math.random() < 0.05 ? 0.3 : 0.9; // Blink simulation
+
+  // Occasional distraction simulation
+  const distPhase = Math.sin(mlPhase * 0.15);
+  const eyeVal = Math.max(0.1, Math.min(1, baseEye * (distPhase < -0.7 ? 0.3 : 1)));
+  const gazeVal = Math.max(0, Math.min(1, baseGaze * (distPhase < -0.8 ? 0.2 : 1)));
+  const headVal = Math.max(0, Math.min(1, baseHead));
+  const blinkVal = baseBlink;
+
+  const result = processFrame(eyeVal, gazeVal, headVal, blinkVal);
+  const { score, category, catInfo, isDistracted } = result;
+
+  // Store data point
+  dataPoints.push({ score, category, ts: Date.now() });
+
+  if (isDistracted) {
+    distractionCount++;
+    const settings = DB.getSettings();
+    if (settings.screen) {
+      document.getElementById('distraction-alert').classList.remove('hidden');
+    }
+    if (settings.sound && distractionCount % 50 === 1) {
+      playBeep();
+    }
+    sendIotAlert('DISTRACTION', score);
+  } else {
+    document.getElementById('distraction-alert').classList.add('hidden');
+  }
+
+  // Update UI
+  updateTrackerUI(score, catInfo, eyeVal, gazeVal, headVal, blinkVal);
+
+  // Live chart update
+  liveScores.push(score);
+  if (liveScores.length > 60) liveScores.shift();
+  if (liveChart) {
+    liveChart.data.labels = liveScores.map((_, i) => i);
+    liveChart.data.datasets[0].data = liveScores;
+    liveChart.data.datasets[0].borderColor = catInfo.color;
+    liveChart.update('none');
+  }
+
+  // Session stats
+  const allScores = dataPoints.map(d => d.score);
+  const avg = Math.round(allScores.reduce((a,b)=>a+b,0)/allScores.length);
+  const fPct = Math.round((dataPoints.filter(d=>d.category==='high'||d.category==='medium').length/dataPoints.length)*100);
+  document.getElementById('sess-avg').textContent = avg;
+  document.getElementById('sess-pct').textContent = fPct + '%';
+  document.getElementById('sess-dist').textContent = Math.floor(distractionCount/10);
+  document.getElementById('sess-cat').textContent = catInfo.label;
+  document.getElementById('sess-cat').style.color = catInfo.color;
+}
+
+function updateTrackerUI(score, catInfo, eye, gaze, head, blink) {
+  // Score ring
+  const canvas = document.getElementById('score-ring-canvas');
+  const ctx = canvas.getContext('2d');
+  const cx = 70, cy = 70, r = 58;
+  ctx.clearRect(0,0,140,140);
+
+  // Background ring
+  ctx.beginPath();
+  ctx.arc(cx,cy,r, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 8;
+  ctx.stroke();
+
+  // Score arc
+  const angle = (score/100) * Math.PI*2;
+  const grad = ctx.createLinearGradient(0,0,140,140);
+  grad.addColorStop(0, catInfo.color);
+  grad.addColorStop(1, '#bc13fe');
+  ctx.beginPath();
+  ctx.arc(cx,cy,r, 0, angle);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.shadowColor = catInfo.color;
+  ctx.shadowBlur = 15;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  document.getElementById('score-display').textContent = score;
+  document.getElementById('score-display').style.color = catInfo.color;
+
+  // Category badge
+  const badge = document.getElementById('category-badge');
+  badge.innerHTML = `<div class="w-2 h-2 rounded-full" style="background:${catInfo.color}; box-shadow: 0 0 6px ${catInfo.color}"></div><span>${catInfo.label}</span>`;
+  badge.style.color = catInfo.color;
+  badge.style.borderColor = catInfo.color + '40';
+
+  // Telemetry bars
+  const gd = ['center','left','right','up','down'][Math.floor(gaze*4.99)];
+  document.getElementById('eye-val').textContent = Math.round(eye*100) + '%';
+  document.getElementById('eye-bar').style.width = (eye*100) + '%';
+  document.getElementById('gaze-val').textContent = gd.toUpperCase();
+  document.getElementById('gaze-bar').style.width = (gaze*100) + '%';
+  document.getElementById('head-val').textContent = head > 0.7 ? 'FORWARD' : head > 0.4 ? 'TILTED' : 'TURNED';
+  document.getElementById('head-bar').style.width = (head*100) + '%';
+  document.getElementById('blink-val').textContent = blink > 0.7 ? 'NORMAL' : 'BLINKING';
+  document.getElementById('blink-bar').style.width = (blink*100) + '%';
+}
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(); osc.stop(ctx.currentTime + 0.3);
+  } catch(e) {}
+}
+
+async function sendIotAlert(type, score) {
+  const settings = DB.getSettings();
+  if (!settings.iot || !settings.iotUrl) return;
+  try {
+    await fetch(settings.iotUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      mode: 'no-cors',
+      body: JSON.stringify({ type, score, deviceId: settings.iotId, ts: Date.now() })
+    });
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════
+let hourlyChartInst = null, donutChartInst = null, trendChartInst = null;
+
+function loadDashboard(period) {
+  // Update period buttons
+  document.querySelectorAll('.dash-period-btn').forEach(b => {
+    b.classList.toggle('active-period', b.dataset.period === period);
+  });
+
+  const sessions = DB.getSessions().filter(s => s.status === 'completed');
+  const today = new Date().toDateString();
+
+  let filtered = sessions;
+  if (period === 'today') {
+    filtered = sessions.filter(s => new Date(s.startTime).toDateString() === today);
+  } else {
+    const d7ago = Date.now() - 7*24*60*60*1000;
+    filtered = sessions.filter(s => new Date(s.startTime).getTime() > d7ago);
+  }
+
+  // KPIs
+  const scores = filtered.map(s=>s.avgFocusScore).filter(Boolean);
+  const avgScore = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+  const pcts = filtered.map(s=>s.focusPercentage).filter(Boolean);
+  const avgPct = pcts.length ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length) : 0;
+  const totalTime = filtered.reduce((a,s)=>a+(s.duration||0),0);
+
+  document.getElementById('d-avg-score').textContent = avgScore;
+  document.getElementById('d-avg-bar').style.width = avgScore + '%';
+  document.getElementById('d-focus-pct').textContent = avgPct + '%';
+  document.getElementById('d-pct-bar').style.width = avgPct + '%';
+  document.getElementById('d-study-time').textContent = fmtTime(totalTime);
+
+  // Hourly breakdown from all datapoints
+  const allDataPts = filtered.flatMap(s => s.dataPoints || []);
+  const hourMap = {};
+  for (const dp of allDataPts) {
+    const h = new Date(dp.ts).getHours();
+    if (!hourMap[h]) hourMap[h] = [];
+    hourMap[h].push(dp.score);
+  }
+  const hours = Array.from({length:24},(_,i)=>i);
+  const hourlyScores = hours.map(h => hourMap[h] ? Math.round(hourMap[h].reduce((a,b)=>a+b,0)/hourMap[h].length) : 0);
+  const bestHour = hourlyScores.indexOf(Math.max(...hourlyScores));
+  document.getElementById('d-best-hour').textContent = allDataPts.length ? `${bestHour}:00` : '--';
+
+  // Hourly Chart
+  const hCtx = document.getElementById('hourly-chart').getContext('2d');
+  if (hourlyChartInst) hourlyChartInst.destroy();
+  hourlyChartInst = new Chart(hCtx, {
+    type: 'bar',
+    data: {
+      labels: hours.map(h => h+':00'),
+      datasets: [{
+        data: hourlyScores,
+        backgroundColor: hourlyScores.map(s => s >= 75 ? 'rgba(0,255,136,0.6)' : s >= 50 ? 'rgba(0,243,255,0.6)' : s >= 25 ? 'rgba(255,170,0,0.6)' : s > 0 ? 'rgba(255,51,102,0.6)' : 'rgba(255,255,255,0.05)'),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#6b7280', font:{size:10}, maxTicksLimit:12 } },
+        y: { min:0, max:100, grid: { color:'rgba(255,255,255,0.05)' }, ticks: { color:'#6b7280', font:{size:10} } }
+      }
+    }
+  });
+
+  // Donut chart
+  const catCounts = { HIGH: 0, MEDIUM: 0, LOW: 0, DISTRACTED: 0 };
+  for (const dp of allDataPts) {
+    if (dp.category==='high') catCounts.HIGH++;
+    else if (dp.category==='medium') catCounts.MEDIUM++;
+    else if (dp.category==='low') catCounts.LOW++;
+    else catCounts.DISTRACTED++;
+  }
+  const dCtx = document.getElementById('donut-chart').getContext('2d');
+  if (donutChartInst) donutChartInst.destroy();
+  const dData = [catCounts.HIGH, catCounts.MEDIUM, catCounts.LOW, catCounts.DISTRACTED];
+  const total = dData.reduce((a,b)=>a+b,0) || 1;
+  donutChartInst = new Chart(dCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['High Focus','Medium Focus','Low Focus','Distracted'],
+      datasets: [{ data: dData, backgroundColor: ['#00ff88','#00f3ff','#ffaa00','#ff3366'], borderWidth: 0, hoverOffset: 4 }]
+    },
+    options: {
+      responsive:true,
+      cutout: '70%',
+      plugins: { legend:{display:false} }
+    }
+  });
+  document.getElementById('donut-legend').innerHTML = [
+    ['#00ff88','High Focus', catCounts.HIGH],
+    ['#00f3ff','Medium Focus', catCounts.MEDIUM],
+    ['#ffaa00','Low Focus', catCounts.LOW],
+    ['#ff3366','Distracted', catCounts.DISTRACTED],
+  ].map(([c,l,v]) => `<div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full" style="background:${c}"></div><span class="text-gray-400">${l}</span></div><span style="color:${c}" class="font-mono">${Math.round(v/total*100)}%</span></div>`).join('');
+
+  // 7-day trend
+  const trendDays = 7;
+  const trendLabels = [], trendData = [];
+  for (let i=trendDays-1; i>=0; i--) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const dayStr = d.toDateString();
+    const daySess = sessions.filter(s=>new Date(s.startTime).toDateString()===dayStr);
+    const dayScores = daySess.map(s=>s.avgFocusScore).filter(Boolean);
+    trendLabels.push(d.toLocaleDateString('en',{month:'short',day:'numeric'}));
+    trendData.push(dayScores.length ? Math.round(dayScores.reduce((a,b)=>a+b,0)/dayScores.length) : 0);
+  }
+  const tCtx = document.getElementById('trend-chart').getContext('2d');
+  if (trendChartInst) trendChartInst.destroy();
+  trendChartInst = new Chart(tCtx, {
+    type: 'line',
+    data: {
+      labels: trendLabels,
+      datasets: [{
+        data: trendData,
+        borderColor: '#bc13fe',
+        backgroundColor: 'rgba(188,19,254,0.08)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#bc13fe',
+        pointBorderColor: '#fff',
+        pointRadius: 5,
+      }]
+    },
+    options: {
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#6b7280',font:{size:11}}},
+        y:{min:0,max:100,grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#6b7280',font:{size:11}}}
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════
+function renderHistory() {
+  const sessions = DB.getSessions().filter(s=>s.status==='completed');
+  const tbody = document.getElementById('history-tbody');
+  const noH = document.getElementById('no-history');
+  const table = document.getElementById('history-table');
+
+  if (!sessions.length) {
+    noH.classList.remove('hidden');
+    table.classList.add('hidden');
+    return;
+  }
+  noH.classList.add('hidden');
+  table.classList.remove('hidden');
+
+  const catColor = {high:'#00ff88',medium:'#00f3ff',low:'#ffaa00',distracted:'#ff3366'};
+  tbody.innerHTML = sessions.map((s,i) => {
+    const dt = new Date(s.startTime);
+    const scores = (s.dataPoints||[]).map(d=>d.score);
+    const topCat = scores.length ? (
+      s.focusPercentage >= 75 ? 'high' :
+      s.focusPercentage >= 50 ? 'medium' :
+      s.focusPercentage >= 25 ? 'low' : 'distracted'
+    ) : 'low';
+    return `<tr class="cursor-pointer" onclick="showSessionDetail(${i})">
+      <td class="font-mono text-sm">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+      <td class="font-mono neon-cyan">${fmtTime(s.duration||0)}</td>
+      <td><span class="font-display text-lg" style="color:${catColor[topCat]}">${s.avgFocusScore||0}</span></td>
+      <td><span class="font-mono" style="color:${catColor[topCat]}">${s.focusPercentage||0}%</span></td>
+      <td class="font-mono text-red-400">${s.distractionCount||0}</td>
+      <td><span class="px-2 py-1 rounded-full text-xs font-bold" style="background:${catColor[topCat]}20; color:${catColor[topCat]}; border:1px solid ${catColor[topCat]}40">${topCat.toUpperCase()}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function showSessionDetail(idx) {
+  const sessions = DB.getSessions().filter(s=>s.status==='completed');
+  const s = sessions[idx];
+  if (!s) return;
+  const dt = new Date(s.startTime);
+  document.getElementById('modal-content').innerHTML = `
+    <div class="grid grid-cols-3 gap-3 mb-5">
+      <div class="glass rounded-xl p-3 text-center"><p class="text-xs text-gray-500 mb-1">Duration</p><p class="font-display neon-cyan">${fmtTime(s.duration)}</p></div>
+      <div class="glass rounded-xl p-3 text-center"><p class="text-xs text-gray-500 mb-1">Avg Score</p><p class="font-display neon-green">${s.avgFocusScore}</p></div>
+      <div class="glass rounded-xl p-3 text-center"><p class="text-xs text-gray-500 mb-1">Focus %</p><p class="font-display neon-purple">${s.focusPercentage}%</p></div>
+    </div>
+    <canvas id="modal-chart" height="120" class="mb-4"></canvas>
+    ${s.hourlyBreakdown && s.hourlyBreakdown.length ? `
+    <p class="text-xs text-gray-500 tracking-widest mb-3 font-mono">TOP FOCUSED HOURS</p>
+    <div class="space-y-2">
+      ${s.hourlyBreakdown.slice(0,3).map(h=>`
+        <div class="flex items-center gap-3">
+          <span class="font-mono text-xs w-12 neon-cyan">${h.hour}:00</span>
+          <div class="flex-1 progress-bar"><div class="progress-fill" style="width:${h.avg}%; background: linear-gradient(to right, #00f3ff, #bc13fe)"></div></div>
+          <span class="font-mono text-xs w-8 text-right" style="color:#00ff88">${h.avg}</span>
+        </div>
+      `).join('')}
+    </div>` : ''}
+  `;
+  document.getElementById('session-modal').classList.remove('hidden');
+
+  // Render chart in modal
+  setTimeout(() => {
+    const pts = s.dataPoints || [];
+    const step = Math.max(1, Math.floor(pts.length/60));
+    const chartPts = pts.filter((_,i)=>i%step===0);
+    const mCtx = document.getElementById('modal-chart').getContext('2d');
+    new Chart(mCtx, {
+      type: 'line',
+      data: {
+        labels: chartPts.map((_,i)=>i),
+        datasets: [{
+          data: chartPts.map(d=>d.score),
+          borderColor: '#00f3ff',
+          backgroundColor: 'rgba(0,243,255,0.05)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+        }]
+      },
+      options: {
+        responsive:true,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{display:false},
+          y:{min:0,max:100,grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#6b7280',font:{size:10}}}
+        }
+      }
+    });
+  }, 100);
+}
+
+function closeModal() {
+  document.getElementById('session-modal').classList.add('hidden');
+}
+
+function clearHistory() {
+  if (confirm('Clear all session history?')) {
+    DB.saveSessions([]);
+    renderHistory();
+    showToast('History cleared');
+  }
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+loadSettings();
+updateHomeStats();
+</script>
+</body>
+</html>
