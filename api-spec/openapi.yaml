@@ -1,0 +1,511 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: AI Focus Tracker API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: sessions
+    description: Focus session management
+  - name: focus
+    description: Focus data recording
+  - name: analytics
+    description: Focus analytics
+  - name: iot
+    description: IoT device integration
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /sessions:
+    get:
+      operationId: getSessions
+      tags: [sessions]
+      summary: Get all sessions
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Session"
+                  total:
+                    type: integer
+                required: [sessions, total]
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Start a new focus session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get a session by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: endSession
+      tags: [sessions]
+      summary: End a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EndSessionRequest"
+      responses:
+        "200":
+          description: Session ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /focus/record:
+    post:
+      operationId: recordFocusData
+      tags: [focus]
+      summary: Record a focus data point
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordFocusRequest"
+      responses:
+        "201":
+          description: Focus data recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FocusDataPoint"
+
+  /analytics/daily:
+    get:
+      operationId: getDailyAnalytics
+      tags: [analytics]
+      summary: Get daily focus analytics
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Daily analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyAnalytics"
+
+  /analytics/trends:
+    get:
+      operationId: getFocusTrends
+      tags: [analytics]
+      summary: Get focus trends over time
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
+      responses:
+        "200":
+          description: Focus trends
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FocusTrends"
+
+  /iot/focus-alert:
+    post:
+      operationId: sendIotAlert
+      tags: [iot]
+      summary: Send focus alert to IoT device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IotAlertRequest"
+      responses:
+        "200":
+          description: Alert sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IotAlertResponse"
+
+  /iot/status:
+    get:
+      operationId: getIotStatus
+      tags: [iot]
+      summary: Get IoT device status
+      responses:
+        "200":
+          description: IoT status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IotStatus"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error, message]
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: integer
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        avgFocusScore:
+          type: number
+          nullable: true
+        totalFocusTime:
+          type: integer
+          description: Total focused time in seconds
+          nullable: true
+        totalDistractionTime:
+          type: integer
+          description: Total distracted time in seconds
+          nullable: true
+        distractionCount:
+          type: integer
+          nullable: true
+        focusPercentage:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [active, completed]
+      required: [id, startTime, status]
+
+    SessionDetail:
+      type: object
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        focusData:
+          type: array
+          items:
+            $ref: "#/components/schemas/FocusDataPoint"
+        distractionEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/DistractionEvent"
+        hourlyBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/HourlyBreakdown"
+      required: [session, focusData, distractionEvents, hourlyBreakdown]
+
+    CreateSessionRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          nullable: true
+      required: []
+
+    EndSessionRequest:
+      type: object
+      properties:
+        avgFocusScore:
+          type: number
+        totalFocusTime:
+          type: integer
+        totalDistractionTime:
+          type: integer
+        distractionCount:
+          type: integer
+        focusPercentage:
+          type: number
+      required: [avgFocusScore, totalFocusTime, totalDistractionTime, distractionCount, focusPercentage]
+
+    RecordFocusRequest:
+      type: object
+      properties:
+        sessionId:
+          type: integer
+        focusScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        focusCategory:
+          type: string
+          enum: [HIGH_FOCUS, MEDIUM_FOCUS, LOW_FOCUS, DISTRACTED]
+        eyeOpenness:
+          type: number
+          nullable: true
+        gazeDirection:
+          type: string
+          nullable: true
+        blinkRate:
+          type: number
+          nullable: true
+        headPose:
+          type: string
+          nullable: true
+        isDistraction:
+          type: boolean
+      required: [sessionId, focusScore, focusCategory, isDistraction]
+
+    FocusDataPoint:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        focusScore:
+          type: number
+        focusCategory:
+          type: string
+        eyeOpenness:
+          type: number
+          nullable: true
+        gazeDirection:
+          type: string
+          nullable: true
+        blinkRate:
+          type: number
+          nullable: true
+        headPose:
+          type: string
+          nullable: true
+        isDistraction:
+          type: boolean
+      required: [id, sessionId, timestamp, focusScore, focusCategory, isDistraction]
+
+    DistractionEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+      required: [id, sessionId, startTime]
+
+    HourlyBreakdown:
+      type: object
+      properties:
+        hour:
+          type: integer
+        avgFocusScore:
+          type: number
+        focusPercentage:
+          type: number
+        distractionCount:
+          type: integer
+      required: [hour, avgFocusScore, focusPercentage, distractionCount]
+
+    DailyAnalytics:
+      type: object
+      properties:
+        date:
+          type: string
+        totalSessions:
+          type: integer
+        totalStudyTime:
+          type: integer
+        avgFocusScore:
+          type: number
+        mostFocusedHour:
+          type: integer
+          nullable: true
+        leastFocusedHour:
+          type: integer
+          nullable: true
+        focusPercentage:
+          type: number
+        highFocusMinutes:
+          type: integer
+        mediumFocusMinutes:
+          type: integer
+        lowFocusMinutes:
+          type: integer
+        distractedMinutes:
+          type: integer
+        hourlyData:
+          type: array
+          items:
+            $ref: "#/components/schemas/HourlyBreakdown"
+      required: [date, totalSessions, totalStudyTime, avgFocusScore, focusPercentage, highFocusMinutes, mediumFocusMinutes, lowFocusMinutes, distractedMinutes, hourlyData]
+
+    FocusTrends:
+      type: object
+      properties:
+        days:
+          type: integer
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              avgFocusScore:
+                type: number
+              focusPercentage:
+                type: number
+              totalSessions:
+                type: integer
+            required: [date, avgFocusScore, focusPercentage, totalSessions]
+      required: [days, data]
+
+    IotAlertRequest:
+      type: object
+      properties:
+        sessionId:
+          type: integer
+          nullable: true
+        alertType:
+          type: string
+          enum: [DISTRACTION, LOW_FOCUS, SESSION_END, SESSION_START]
+        focusScore:
+          type: number
+          nullable: true
+        message:
+          type: string
+          nullable: true
+        deviceId:
+          type: string
+          nullable: true
+      required: [alertType]
+
+    IotAlertResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        alertId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        delivered:
+          type: boolean
+        message:
+          type: string
+      required: [success, alertId, timestamp, delivered, message]
+
+    IotStatus:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        deviceId:
+          type: string
+          nullable: true
+        lastSeen:
+          type: string
+          format: date-time
+          nullable: true
+        alertsEnabled:
+          type: boolean
+      required: [connected, alertsEnabled]
